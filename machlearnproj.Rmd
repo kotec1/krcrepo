@@ -1,0 +1,96 @@
+---
+title: "Machine learning project"
+author: "Koteswara Chintalacharuvu"
+date: "June 21, 2015"
+output: html_document
+---
+
+Introduction
+
+The goal of this project was to generate a model by using the exercise data on accelerometers on the belt, forearm, arm, and dumbell of 6 participants obtained from the https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv. The data was downloaded, tidied, and split into a trainset and validationset.  The trainset was fitted with the ML algorithm Random Forest.  Using the validationset, 22/5885 out of sample error rate was obtained. The model was used to predict the class of exercises performed described as 20 data observations obtained from the website https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv.  
+
+```{r}
+#load the following packages
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+```
+
+Obtaining the data from the given Url address
+
+```{r, echo=FALSE}
+file <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(file, destfile = "train.csv")
+training <- read.csv("train.csv", sep = ",", header = TRUE)
+file <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(file, destfile = "test.csv")
+testing <- read.csv("test.csv", sep = ",", header = TRUE)
+```
+
+Visualize the data
+
+```{r}
+dim(training)
+dim(testing)
+```
+
+ The variable 'X' is listing of the observations in rows and there are variables with zero values and NA.  Because the project was about using only the accelerometers on the belt, forearm, arm, and dumbell only, only the variables related are to be included. These modifications of the data table is part of cleaning the data.
+ 
+Cleaning data.
+```{r}
+##remove the first variable listing of columns
+training1 <- training[,-1]
+testing1 <- testing[,-1]
+##removing the NA containing variables
+NAindex <- apply(training1,2,function(x) {sum(is.na(x))}) 
+training1na <- training1[,which(NAindex == 0)]
+NAindex <- apply(testing1,2,function(x) {sum(is.na(x))}) 
+testing1na <- testing1[,which(NAindex == 0)]
+dim(training1na)
+## remove nearZeroVariables
+trainingclean <- nearZeroVar(training1na)
+trainingclean1 <- training1na[ , -trainingclean]
+##removing variables with NAs 
+testingclean <- nearZeroVar(testing1na)
+testingclean1 <- testing1na[ , -testingclean]
+dim(testingclean1)
+## include only the processing variables
+var <- which(lapply(trainingclean1, class) %in% "numeric")
+df <-preProcess(trainingclean1[,var],method=c('knnImpute', 'center', 'scale'))
+train <- predict(df, trainingclean1[,var])
+train$classe <- trainingclean1$classe
+test <-predict(df,testingclean1[,var])
+```
+
+Partitioning the training set into the training set and a cross-validation set. To obtain a reproducible result, a seed is set.
+
+```{r}
+set.seed(1234509)
+inTrain <- createDataPartition(train$classe, p = 0.7, list = F)
+trainset <- train[inTrain,]
+validationset <- train[-inTrain,]
+dim(trainset)
+dim(validationset)
+```
+Using ML algorithm to train and predict: the data is small enough not to be worried about time of analysis and randomForest gives a high level of accuracy
+```{r}
+##train the model using the high accuracy method RandomForest
+modFit <- randomForest(classe ~., data = trainset)
+trainpred <- predict(modFit, trainset)
+confusionMatrix(trainpred, trainset$classe)
+```
+Becasue the model is built on the trainset, obviously the accuracy high. Obviously, none of the values were missed. To validate the model, it is used to predict the validationset data.
+
+```{r}
+## cross-validation using the validation set
+validatepred <- predict(modFit, validationset)
+confusionMatrix(validatepred, validationset$classe)
+```
+While all 13737 valus in the trainset were predicted accurately, 22 of the 5885 observations were missed in the validationset.  This is <0.5% out-of sample error rate.  The model is used to predict the 20 smaples in the test set.
+
+```{r}
+testpred <- predict(modFit, test)
+testpred
+```
